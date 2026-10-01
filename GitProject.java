@@ -1,8 +1,11 @@
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
@@ -12,7 +15,9 @@ public class GitProject {
         // 2.1
         init();
         // testing 2.2
-        System.out.println(hashFile("Hello.txt"));
+        // System.out.println(hashFile("Hello.txt"));
+        // testing 2.3
+        createBlob("Hello.txt");
 
     }
 
@@ -64,5 +69,20 @@ public class GitProject {
         }
         byte[] hash = digest.digest(fileBytes);
         return HexFormat.of().formatHex(hash);
+    }
+
+    public static String createBlob(String filePath) throws IOException {
+        String shaHash = hashFile(filePath);
+        File blobFile = new File("git/objects/" + shaHash);
+        Path pathBlob = Path.of(blobFile.getPath());
+        blobFile.createNewFile();
+        Path path = Path.of(filePath);
+        try {
+            byte[] fileBytes = Files.readAllBytes(path);
+            Files.write(pathBlob, fileBytes);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return shaHash;
     }
 }
