@@ -18,6 +18,10 @@ public class GitProject {
         // System.out.println(hashFile("Hello.txt"));
         // testing 2.3
         createBlob("Hello.txt");
+        createBlob("Tester.txt");
+        // testing 2.4
+        addToIndex("Hello.txt");
+        addToIndex("Tester.txt");
 
     }
 
@@ -84,5 +88,11 @@ public class GitProject {
             e.printStackTrace();
         }
         return shaHash;
+    }
+
+    public static void addToIndex(String filePath) throws IOException {
+        FileWriter indexWriter = new FileWriter("git/index", true);
+        indexWriter.write("\n" + hashFile(filePath) + " git-project-Margaux/" + filePath);
+        indexWriter.close();
     }
 }
