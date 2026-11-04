@@ -12,30 +12,53 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.Map;
+import java.util.Date;
+import java.lang.StringBuilder;
+
+
 
 public class GitProject {
     public static void main(String[] args) throws IOException {
-        init();
+        // init();
 
-        addToIndex("Hello.txt");
-        addToIndex("test/Tester.txt");
-        addToIndex("README.md");
+        // addToIndex("Hello.txt");
+        // addToIndex("Tester.txt");
+        // addToIndex("test/Tester.txt");
+        // addToIndex("README.md");
 
-        ArrayList<String> workingList = createWorkingList();
-        System.out.println("Working List:");
-        for (String e : workingList) {
-            System.out.println(e);
-        }
+        // addToIndex("file.txt");
+        // addToIndex("test/file.txt");
 
-        String first = createTree(workingList, "test");
-        String second = createTree(workingList, "test");
-        System.out.println("\ntest tree hash: " + first);
-        System.out.println("same hash both times: " + first.equals(second));
-        System.out.println("contents:\n" + Files.readString(Path.of("git/objects/" + first)));
+        // ArrayList<String> workingList = createWorkingList();
+        // System.out.println("Working List:");
+        // for (String e : workingList) {
+        //     System.out.println(e);
+        // }
 
-        String root = createTree(workingList, "");
-        System.out.println("\nroot tree hash: " + root);
-        System.out.println("contents:\n" + Files.readString(Path.of("git/objects/" + root)));
+        // String first = createTree(workingList, "test");
+        // String second = createTree(workingList, "test");
+        // System.out.println("\ntest tree hash: " + first);
+        // System.out.println("same hash both times: " + first.equals(second));
+        // System.out.println("contents:\n" + Files.readString(Path.of("git/objects/" + first)));
+
+        // String root = buildTree(workingList);
+        // System.out.println("\nroot tree hash: " + root);
+        // System.out.println("contents:\n" + Files.readString(Path.of("git/objects/" + root)));
+
+        // // testing commit
+        // System.out.println("\n" + "------------TESTING COMMIT-----------" + "\n");
+        // String testCommit = commit("mateo", "please let this work");
+        // System.out.println("First Commit Hash: " + testCommit);
+        // System.out.println("First Commit contents:\n" + Files.readString(Path.of("git/objects/" + testCommit)));
+
+        // String testCommitTwo = commit("mateo", "please let this work again");
+        // System.out.println("Second Commit Hash: " + testCommitTwo);
+        // System.out.println("Second Commit contents:\n" + Files.readString(Path.of("git/objects/" + testCommitTwo)));
+
+        System.out.println("-----Checking out----");
+        checkout("06e732f0ad6e79c364c387a5fdd711a9ab06938e");
+        
+
     }
 
     // method goal: Create a git/ directory if it does not already exist; create an
@@ -104,6 +127,7 @@ public class GitProject {
             // int space = line.indexOf(' '); // (working during 3.2) I just realized that
             // sha-1 hash is always 40 characters.
             // indexMap.put(line.substring(space + 1), line.substring(0, space));
+            // path | hash
             indexMap.put(line.substring(41), line.substring(0, 40));
         }
         reader.close();
@@ -124,42 +148,62 @@ public class GitProject {
         writer.close();
     }
 
-    // doesn't make trees yet (thats in gp3.3)
     public static String createTree(ArrayList<String> workingList, String dirPath) throws IOException {
-        StringBuilder tree = new StringBuilder();
-        boolean isFirstEntry = true;
+        ArrayList<String> lines = new ArrayList<>();
+        // ^^ lines is comprised of the children
 
         for (String e : workingList) {
             // the format is blob + hash + path. blob is 4 characters, and hash is always
             // 40, so that makes my life so much easier
+            String type = e.substring(0, 4);
             String hash = e.substring(5, 45);
             String path = e.substring(46);
 
-            int lastSlash = path.lastIndexOf('/'); // find the last slash in the path to get the last child
-            String dir;
-            if (lastSlash == -1) {
-                dir = ""; // no directory, just the file
-            } else {
-                dir = path.substring(0, lastSlash); // get the directory path
-            }
-            String name = path.substring(lastSlash + 1);
-            if (dir.equals(dirPath)) {
-                if (!isFirstEntry)
-                    tree.append("\n");
-                tree.append("blob " + hash + " " + name);
-                isFirstEntry = false;
-            }
+            String dir = parentDir(path);
+            String name = path.substring(path.lastIndexOf('/') + 1);
+            if (dir.equals(dirPath))
+                lines.add(type + " " + hash + " " + name);
+
         }
-        String treeHash = hashString(tree.toString());
+        lines.sort((a, b) -> a.substring(46).compareTo(b.substring(46))); // https://www.w3schools.com/java/ref_arraylist_sort.asp
+        String content = String.join("\n", lines);
+        String treeHash = hashString(content);
         FileWriter writer;
         try {
             writer = new FileWriter(new File("git/objects/" + treeHash));
-            writer.write(tree.toString());
+            writer.write(content);
             writer.close();
         } catch (IOException exception) {
             throw new IOException("Error writing tree object to file: " + exception.getMessage());
         }
         return treeHash;
+    }
+
+    public static String buildTree(ArrayList<String> workingList) throws IOException {
+        String theBiggestTheLargest = ""; // this is the deepest directory. I was listening to BigXthaPlug
+        for (String e : workingList) {
+            String dir = parentDir(e.substring(46));
+            if (dir.length() > theBiggestTheLargest.length())
+                theBiggestTheLargest = dir;
+        }
+
+        // this is the base case. if there are no directories left, we can just create a tree and return its hash; this is the root
+        if (theBiggestTheLargest.isEmpty()) {
+            return createTree(workingList, "");
+        }
+            
+
+        String treeHash = createTree(workingList, theBiggestTheLargest);
+
+        // drop the directory's children and replace them with one tree entry
+        ArrayList<String> newWorkingList = new ArrayList<>();
+        for (String e : workingList) {
+            if (!parentDir(e.substring(46)).equals(theBiggestTheLargest))
+                newWorkingList.add(e);
+            // seems like this effectively collapses all of this directories children out of the new working list
+        }
+        newWorkingList.add("tree " + treeHash + " " + theBiggestTheLargest);
+        return buildTree(newWorkingList); // we don't gotta re-sort because create tree will
     }
 
     public static String hashString(String content) {
@@ -173,8 +217,12 @@ public class GitProject {
         return HexFormat.of().formatHex(hash);
     }
 
-    // this doens't work as its not sorted, but its also lowk not needed for gp 3.2
-    // so shhh
+    public static String parentDir(String path) {
+        if (path.lastIndexOf('/') == -1)
+            return "";
+        return path.substring(0, path.lastIndexOf('/'));
+    }
+
     public static ArrayList<String> createWorkingList() {
         ArrayList<String> workingList = new ArrayList<>();
         try {
@@ -187,6 +235,129 @@ public class GitProject {
         } catch (IOException e) {
             System.out.println("File error: " + e.getMessage());
         }
+        workingList.sort((a, b) -> a.substring(46).compareTo(b.substring(46))); // https://www.w3schools.com/java/ref_arraylist_sort.asp
         return workingList;
     }
+
+    public static String commit(String author, String message) throws IOException {
+            
+        
+            ArrayList<String> workingList = createWorkingList();
+            String rootHash = buildTree(workingList);
+
+            StringBuilder commitContents = new StringBuilder();
+
+            //look into HEAD to find previous commit hash
+            BufferedReader reader = new BufferedReader(new FileReader(new File("git/HEAD")));
+            StringBuilder previousCommitHashBuilder = new StringBuilder("");
+            String line;
+            while ((line = reader.readLine()) != null) {
+                previousCommitHashBuilder.append(line);
+            }
+            reader.close();
+            String previousCommitHash = previousCommitHashBuilder.toString();
+
+            commitContents.append("tree: " + rootHash + "\n");
+
+            if (!previousCommitHash.equals("")) {
+                commitContents.append("parent: " + previousCommitHash + "\n");
+            }
+
+            commitContents.append("author: " + author + "\n");
+
+            Date currentDate = new Date();
+            commitContents.append("date: " + currentDate + "\n");
+
+            commitContents.append("message: " + message);
+
+            String shaHash = hashString(commitContents.toString());
+
+            File commitFile = new File("git/objects/" + shaHash);
+            FileWriter commitWriter = new FileWriter(commitFile);
+            commitWriter.write(commitContents.toString());
+            commitWriter.close();
+
+            File HEAD = new File("git/HEAD");
+            FileWriter headWriter = new FileWriter(HEAD);
+            headWriter.write(shaHash);
+            headWriter.close();
+
+
+            return shaHash;
+
+        }
+
+
+
+
+    public static void checkout(String commitHash) throws IOException {
+        // implement here
+
+        
+        BufferedReader dirReader = new BufferedReader(new FileReader("git/objects/" + commitHash));
+        String line = dirReader.readLine();
+        dirReader.close();
+
+        int firstSpace = line.indexOf(" ");
+        String rootHash = line.substring(firstSpace + 1);
+
+
+
+
+
+        checkoutRecursive("tree", rootHash, ".");
+        // dot is git-project-Margaux wihch is the working root so it works for other code
+
+    }
+
+    public static void checkoutRecursive(String objectType, String objectHash, String dirPath) throws IOException {
+        //base case
+        if (objectType.equals("blob")) {
+            createFile(objectHash, dirPath);
+            return;
+        }
+
+        // it must be tree
+        File folder = new File(dirPath);
+        folder.mkdir();
+
+        //make array list w/ all the contents
+        ArrayList<String> dirChildren = new ArrayList<String>();
+        BufferedReader dirReader = new BufferedReader(new FileReader("git/objects/" + objectHash));
+        String line;
+
+        while ((line = dirReader.readLine()) != null) {
+                dirChildren.add(line);
+            }
+        dirReader.close();
+
+        for (int i = 0; i < dirChildren.size(); i++) {
+            int firstSpace = dirChildren.get(i).indexOf(" ");
+            int lastSpace = dirChildren.get(i).lastIndexOf(" ");
+    
+            String childType = dirChildren.get(i).substring(0, firstSpace);
+            String childHash = dirChildren.get(i).split(" ")[1];
+            String childName = dirChildren.get(i).substring(lastSpace + 1);
+            String childPath = dirPath + "/" + childName;
+
+            checkoutRecursive(childType, childHash, childPath);
+        }
+
+    }
+
+    public static String createFile(String dirHash, String dirPath) throws IOException {
+
+        //copied code from createBlob, but make it so it now creates a real file, not a blob in objects
+        Path blobPath = Path.of("git/objects", dirHash);
+        byte[] blobContents = Files.readAllBytes(blobPath);
+        Path childPath = Path.of(dirPath);
+
+        Files.write(childPath, blobContents);
+
+        return dirPath;
+        
+    }
 }
+
+
+    
