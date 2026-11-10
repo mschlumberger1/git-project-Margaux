@@ -57,7 +57,7 @@ public class GitWrapper {
     public static void checkout(String commitHash) throws IOException{
         // implement here
         try {
-            GitProject.checkout(commitHash);
+            GitProject.checkoutHash(commitHash);
         } catch (Exception e) {
             throw new IOException("Did not work; error: " + e);
         }
