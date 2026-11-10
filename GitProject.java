@@ -4,8 +4,11 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryNotEmptyException;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -14,8 +17,6 @@ import java.util.HexFormat;
 import java.util.Map;
 import java.util.Date;
 import java.lang.StringBuilder;
-
-
 
 public class GitProject {
     public static void main(String[] args) throws IOException {
@@ -32,32 +33,35 @@ public class GitProject {
         // ArrayList<String> workingList = createWorkingList();
         // System.out.println("Working List:");
         // for (String e : workingList) {
-        //     System.out.println(e);
+        // System.out.println(e);
         // }
 
         // String first = createTree(workingList, "test");
         // String second = createTree(workingList, "test");
         // System.out.println("\ntest tree hash: " + first);
         // System.out.println("same hash both times: " + first.equals(second));
-        // System.out.println("contents:\n" + Files.readString(Path.of("git/objects/" + first)));
+        // System.out.println("contents:\n" + Files.readString(Path.of("git/objects/" +
+        // first)));
 
         // String root = buildTree(workingList);
         // System.out.println("\nroot tree hash: " + root);
-        // System.out.println("contents:\n" + Files.readString(Path.of("git/objects/" + root)));
+        // System.out.println("contents:\n" + Files.readString(Path.of("git/objects/" +
+        // root)));
 
         // // testing commit
         // System.out.println("\n" + "------------TESTING COMMIT-----------" + "\n");
         // String testCommit = commit("mateo", "please let this work");
         // System.out.println("First Commit Hash: " + testCommit);
-        // System.out.println("First Commit contents:\n" + Files.readString(Path.of("git/objects/" + testCommit)));
+        // System.out.println("First Commit contents:\n" +
+        // Files.readString(Path.of("git/objects/" + testCommit)));
 
         // String testCommitTwo = commit("mateo", "please let this work again");
         // System.out.println("Second Commit Hash: " + testCommitTwo);
-        // System.out.println("Second Commit contents:\n" + Files.readString(Path.of("git/objects/" + testCommitTwo)));
+        // System.out.println("Second Commit contents:\n" +
+        // Files.readString(Path.of("git/objects/" + testCommitTwo)));
 
         System.out.println("-----Checking out----");
-        checkout("06e732f0ad6e79c364c387a5fdd711a9ab06938e");
-        
+        checkoutHash("06e732f0ad6e79c364c387a5fdd711a9ab06938e");
 
     }
 
@@ -187,11 +191,11 @@ public class GitProject {
                 theBiggestTheLargest = dir;
         }
 
-        // this is the base case. if there are no directories left, we can just create a tree and return its hash; this is the root
+        // this is the base case. if there are no directories left, we can just create a
+        // tree and return its hash; this is the root
         if (theBiggestTheLargest.isEmpty()) {
             return createTree(workingList, "");
         }
-            
 
         String treeHash = createTree(workingList, theBiggestTheLargest);
 
@@ -200,7 +204,8 @@ public class GitProject {
         for (String e : workingList) {
             if (!parentDir(e.substring(46)).equals(theBiggestTheLargest))
                 newWorkingList.add(e);
-            // seems like this effectively collapses all of this directories children out of the new working list
+            // seems like this effectively collapses all of this directories children out of
+            // the new working list
         }
         newWorkingList.add("tree " + treeHash + " " + theBiggestTheLargest);
         return buildTree(newWorkingList); // we don't gotta re-sort because create tree will
@@ -240,60 +245,64 @@ public class GitProject {
     }
 
     public static String commit(String author, String message) throws IOException {
-            
-        
-            ArrayList<String> workingList = createWorkingList();
-            String rootHash = buildTree(workingList);
 
-            StringBuilder commitContents = new StringBuilder();
+        ArrayList<String> workingList = createWorkingList();
+        String rootHash = buildTree(workingList);
 
-            //look into HEAD to find previous commit hash
-            BufferedReader reader = new BufferedReader(new FileReader(new File("git/HEAD")));
-            StringBuilder previousCommitHashBuilder = new StringBuilder("");
-            String line;
-            while ((line = reader.readLine()) != null) {
-                previousCommitHashBuilder.append(line);
-            }
-            reader.close();
-            String previousCommitHash = previousCommitHashBuilder.toString();
+        StringBuilder commitContents = new StringBuilder();
 
-            commitContents.append("tree: " + rootHash + "\n");
+        // look into HEAD to find previous commit hash
+        BufferedReader reader = new BufferedReader(new FileReader(new File("git/HEAD")));
+        StringBuilder previousCommitHashBuilder = new StringBuilder("");
+        String line;
+        while ((line = reader.readLine()) != null) {
+            previousCommitHashBuilder.append(line);
+        }
+        reader.close();
+        String previousCommitHash = previousCommitHashBuilder.toString();
 
-            if (!previousCommitHash.equals("")) {
-                commitContents.append("parent: " + previousCommitHash + "\n");
-            }
+        commitContents.append("tree: " + rootHash + "\n");
 
-            commitContents.append("author: " + author + "\n");
-
-            Date currentDate = new Date();
-            commitContents.append("date: " + currentDate + "\n");
-
-            commitContents.append("message: " + message);
-
-            String shaHash = hashString(commitContents.toString());
-
-            File commitFile = new File("git/objects/" + shaHash);
-            FileWriter commitWriter = new FileWriter(commitFile);
-            commitWriter.write(commitContents.toString());
-            commitWriter.close();
-
-            File HEAD = new File("git/HEAD");
-            FileWriter headWriter = new FileWriter(HEAD);
-            headWriter.write(shaHash);
-            headWriter.close();
-
-
-            return shaHash;
-
+        if (!previousCommitHash.equals("")) {
+            commitContents.append("parent: " + previousCommitHash + "\n");
         }
 
+        commitContents.append("author: " + author + "\n");
 
+        Date currentDate = new Date();
+        commitContents.append("date: " + currentDate + "\n");
 
+        commitContents.append("message: " + message);
 
-    public static void checkout(String commitHash) throws IOException {
+        String shaHash = hashString(commitContents.toString());
+
+        File commitFile = new File("git/objects/" + shaHash);
+        FileWriter commitWriter = new FileWriter(commitFile);
+        commitWriter.write(commitContents.toString());
+        commitWriter.close();
+
+        File HEAD = new File("git/HEAD");
+        FileWriter headWriter = new FileWriter(HEAD);
+        headWriter.write(shaHash);
+        headWriter.close();
+
+        return shaHash;
+
+    }
+
+    // public static void checkout(String input) throws IOException {
+    // if (input.substring(0,4).equals("refs")) {
+    // String branch = input.substring(4);
+
+    // } else if {
+    // checkoutHash(input);
+    // }
+    // }
+
+    // this method only works for a singular hash input - it doesnt work for
+    // branches
+    public static void checkoutHash(String commitHash) throws IOException {
         // implement here
-
-        
         BufferedReader dirReader = new BufferedReader(new FileReader("git/objects/" + commitHash));
         String line = dirReader.readLine();
         dirReader.close();
@@ -301,17 +310,16 @@ public class GitProject {
         int firstSpace = line.indexOf(" ");
         String rootHash = line.substring(firstSpace + 1);
 
-
-
-
+        clearIndex();
 
         checkoutRecursive("tree", rootHash, ".");
-        // dot is git-project-Margaux wihch is the working root so it works for other code
+        // dot is git-project-Margaux wihch is the working root so it works for other
+        // code
 
     }
 
     public static void checkoutRecursive(String objectType, String objectHash, String dirPath) throws IOException {
-        //base case
+        // base case
         if (objectType.equals("blob")) {
             createFile(objectHash, dirPath);
             return;
@@ -321,25 +329,26 @@ public class GitProject {
         File folder = new File(dirPath);
         folder.mkdir();
 
-        //make array list w/ all the contents
+        // make array list w/ all the contents
         ArrayList<String> dirChildren = new ArrayList<String>();
         BufferedReader dirReader = new BufferedReader(new FileReader("git/objects/" + objectHash));
         String line;
 
         while ((line = dirReader.readLine()) != null) {
-                dirChildren.add(line);
-            }
+            dirChildren.add(line);
+        }
         dirReader.close();
 
         for (int i = 0; i < dirChildren.size(); i++) {
             int firstSpace = dirChildren.get(i).indexOf(" ");
             int lastSpace = dirChildren.get(i).lastIndexOf(" ");
-    
+
             String childType = dirChildren.get(i).substring(0, firstSpace);
             String childHash = dirChildren.get(i).split(" ")[1];
             String childName = dirChildren.get(i).substring(lastSpace + 1);
             String childPath = dirPath + "/" + childName;
 
+            addToIndex(childPath);
             checkoutRecursive(childType, childHash, childPath);
         }
 
@@ -347,7 +356,8 @@ public class GitProject {
 
     public static String createFile(String dirHash, String dirPath) throws IOException {
 
-        //copied code from createBlob, but make it so it now creates a real file, not a blob in objects
+        // copied code from createBlob, but make it so it now creates a real file, not a
+        // blob in objects
         Path blobPath = Path.of("git/objects", dirHash);
         byte[] blobContents = Files.readAllBytes(blobPath);
         Path childPath = Path.of(dirPath);
@@ -355,9 +365,24 @@ public class GitProject {
         Files.write(childPath, blobContents);
 
         return dirPath;
-        
+
+    }
+
+    // helper method: clearing the index
+    public static void clearIndex() throws IOException {
+        // deletes current index
+        Path path = Paths.get("git/index");
+        try {
+            Files.delete(path);
+        } catch (NoSuchFileException e) {
+            System.err.println("index doesn't exist.");
+        } catch (DirectoryNotEmptyException e) {
+            System.err.println("directory is not empty.");
+        } catch (IOException e) {
+            System.err.println("failed due to an I/O error: " + e.getMessage());
+        }
+        // creating new index
+        File index = new File("git/index");
+        index.createNewFile();
     }
 }
-
-
-    
