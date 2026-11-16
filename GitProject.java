@@ -78,6 +78,9 @@ public class GitProject {
         File objects = new File("git/objects");
         File index = new File("git/index");
         File HEAD = new File("git/HEAD");
+        File refs = new File("git/refs");
+        File heads = new File("git/refs/heads");
+
         if (objects.exists() && index.exists() && HEAD.exists())
             System.out.println("Git Repository Already Exists");
 
@@ -85,7 +88,11 @@ public class GitProject {
             git.mkdir();
             objects.mkdir();
             index.createNewFile();
-            HEAD.createNewFile();
+            refs.mkdirs();
+            heads.mkdirs();
+            if (HEAD.createNewFile()) {
+                Files.writeString(HEAD.toPath(), "ref: refs/heads/main");
+            }
         } catch (IOException e) {
             System.out.println("File error: " + e.getMessage());
         }
@@ -253,20 +260,31 @@ public class GitProject {
 
         // look into HEAD to find previous commit hash
         BufferedReader reader = new BufferedReader(new FileReader(new File("git/HEAD")));
-        StringBuilder previousCommitHashBuilder = new StringBuilder("");
+        StringBuilder previousCommit = new StringBuilder("");
         String line;
         while ((line = reader.readLine()) != null) {
-            previousCommitHashBuilder.append(line);
+            previousCommit.append(line);
         }
         reader.close();
-        String previousCommitHash = previousCommitHashBuilder.toString();
-
+        String previousCommitHash = "";
+        String previousCommitBuilder = previousCommit.toString();
+        // case 1: head contains branch
+        boolean branch = previousCommitBuilder.startsWith("ref: ");
+        Path branchFile = null;
+        if (branch) {
+            String branchReference = previousCommitBuilder.substring(5);
+            branchFile = Path.of("git", branchReference);
+            if (Files.exists(branchFile)) {
+                previousCommitHash = Files.readString(branchFile).trim();
+            }
+            // case 2: head contains hash
+        } else {
+            previousCommitHash = previousCommitBuilder;
+        }
         commitContents.append("tree: " + rootHash + "\n");
-
         if (!previousCommitHash.equals("")) {
             commitContents.append("parent: " + previousCommitHash + "\n");
         }
-
         commitContents.append("author: " + author + "\n");
 
         Date currentDate = new Date();
@@ -275,29 +293,39 @@ public class GitProject {
         commitContents.append("message: " + message);
 
         String shaHash = hashString(commitContents.toString());
-
-        File commitFile = new File("git/objects/" + shaHash);
-        FileWriter commitWriter = new FileWriter(commitFile);
-        commitWriter.write(commitContents.toString());
-        commitWriter.close();
-
-        File HEAD = new File("git/HEAD");
-        FileWriter headWriter = new FileWriter(HEAD);
-        headWriter.write(shaHash);
-        headWriter.close();
-
+        Path commitFile = Path.of("git/objects", shaHash);
+        Files.writeString(commitFile, commitContents.toString());
+        if (branch) {
+            Files.createDirectories(branchFile.getParent());
+            Files.writeString(branchFile, shaHash);
+        } else {
+            Files.writeString(Path.of("git/HEAD"), shaHash);
+        }
         return shaHash;
-
     }
 
-    // public static void checkout(String input) throws IOException {
-    // if (input.substring(0,4).equals("refs")) {
-    // String branch = input.substring(4);
+    public static void checkout(String input) throws IOException {
+        if (input.matches("[0-9a-fA-F]{40}")) {
+            checkoutHash(input);
+        } else {
+            checkoutBranch(input);
+        }
+    }
 
-    // } else if {
-    // checkoutHash(input);
-    // }
-    // }
+    // works for branches - references hash version
+    public static void checkoutBranch(String branchName) throws IOException {
+        Path branchFile = Path.of("git/refs/heads", branchName);
+        if (!Files.exists(branchFile)) {
+            throw new IOException("branch dne");
+        }
+        String commitHash = Files.readString(branchFile).trim();
+        if (commitHash.isEmpty()) {
+            throw new IOException("branch doesn't have any commits");
+        }
+        checkoutHash(commitHash);
+        Files.writeString(Path.of("git/HEAD"), "ref: refs/heads/" + branchName);
+        // moves head to branch instead of commit (in concept)
+    }
 
     // this method only works for a singular hash input - it doesnt work for
     // branches
@@ -315,7 +343,7 @@ public class GitProject {
         checkoutRecursive("tree", rootHash, ".");
         // dot is git-project-Margaux wihch is the working root so it works for other
         // code
-
+        Files.writeString(Path.of("git/HEAD"), commitHash);
     }
 
     public static void checkoutRecursive(String objectType, String objectHash, String dirPath) throws IOException {
@@ -327,7 +355,7 @@ public class GitProject {
 
         // it must be tree
         File folder = new File(dirPath);
-        folder.mkdir();
+        folder.mkdirs();
 
         // make array list w/ all the contents
         ArrayList<String> dirChildren = new ArrayList<String>();
@@ -346,10 +374,18 @@ public class GitProject {
             String childType = dirChildren.get(i).substring(0, firstSpace);
             String childHash = dirChildren.get(i).split(" ")[1];
             String childName = dirChildren.get(i).substring(lastSpace + 1);
-            String childPath = dirPath + "/" + childName;
+            String childPath = "";
+            if (dirPath.equals(".")) {
+                childPath = childName;
+            } else {
+                childPath = dirPath + "/" + childName;
+            }
 
-            addToIndex(childPath);
             checkoutRecursive(childType, childHash, childPath);
+
+            if (childType.equals("blob")) {
+                addToIndex(childPath);
+            }
         }
 
     }
@@ -368,21 +404,35 @@ public class GitProject {
 
     }
 
+    public static void createBranch(String branchName) throws IOException {
+        Path newBranch = Path.of("git/refs/heads", branchName);
+        if (Files.exists(newBranch)) {
+            throw new IOException("branch already exists");
+        }
+        String headContents = Files.readString(Path.of("git/HEAD"));
+        String currentHash = "";
+        if (headContents.startsWith("ref: ")) {
+            Path currentBranch = Path.of("git", headContents.substring(5));
+            if (!Files.exists(currentBranch)) {
+                throw new IOException("no commits yet");
+            }
+            currentHash = Files.readString(currentBranch);
+        } else {
+            currentHash = headContents;
+            if (currentHash.isEmpty()) {
+                throw new IOException("no commits yet");
+            }
+        }
+        // note createDirectories is from google and not neccessary if init is
+        // successful; im keeping it in case something else has gone wrong
+        Files.createDirectories(newBranch.getParent());
+        Files.writeString(newBranch, currentHash);
+    }
+
     // helper method: clearing the index
     public static void clearIndex() throws IOException {
-        // deletes current index
         Path path = Paths.get("git/index");
-        try {
-            Files.delete(path);
-        } catch (NoSuchFileException e) {
-            System.err.println("index doesn't exist.");
-        } catch (DirectoryNotEmptyException e) {
-            System.err.println("directory is not empty.");
-        } catch (IOException e) {
-            System.err.println("failed due to an I/O error: " + e.getMessage());
-        }
-        // creating new index
-        File index = new File("git/index");
-        index.createNewFile();
+        Files.writeString(path, "");
     }
+
 }
